@@ -11,6 +11,7 @@ import teamRoutes from "./infrastructure/adapters/api/routes/teams";
 import csvRoutes from "./infrastructure/adapters/api/routes/csv";
 import taskRoutes from "./infrastructure/adapters/api/routes/tasks";
 import userRoutes from "./infrastructure/adapters/api/routes/users";
+import quickbooksRoutes from "./infrastructure/adapters/api/routes/quickbooks";
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use("/api/teams", teamRoutes);
 app.use("/api/csv", csvRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/quickbooks", quickbooksRoutes);
 
 async function start() {
   await connectDatabase();
