@@ -2,10 +2,41 @@ import { Router, Request, Response } from "express";
 import { AuthUseCase } from "../../../../core/application/AuthUseCase";
 import { MongooseUserRepository } from "../../persistence/MongooseUserRepository";
 import { AuthRequest, authMiddleware } from "../middleware/auth";
+import { env } from "../../../../config/env";
 
 const router = Router();
 const userRepo = new MongooseUserRepository();
 const authUseCase = new AuthUseCase(userRepo);
+
+router.post("/setup-admin", async (req: Request, res: Response) => {
+  try {
+    const { email, password, name, adminKey } = req.body;
+    if (!email || !password || !name || !adminKey) {
+      res.status(400).json({ error: "email, password, name and adminKey are required" });
+      return;
+    }
+    if (adminKey !== env.ADMIN_SECRET_KEY) {
+      res.status(403).json({ error: "Invalid admin key" });
+      return;
+    }
+    const existing = await userRepo.findByEmail(email);
+    if (existing) {
+      res.status(400).json({ error: "Email already registered" });
+      return;
+    }
+    const adminExists = await userRepo.findAdmin();
+    if (adminExists) {
+      res.status(400).json({ error: "An admin already exists" });
+      return;
+    }
+    const result = await authUseCase.register({ email, password, name });
+    await userRepo.update(result.user.id!, { role: "admin" });
+    res.status(201).json({ message: "Admin user created successfully" });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(400).json({ error: message });
+  }
+});
 
 router.post("/register", async (req: Request, res: Response) => {
   try {

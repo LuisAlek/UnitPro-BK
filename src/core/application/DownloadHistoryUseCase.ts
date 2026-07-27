@@ -13,7 +13,6 @@ export class DownloadHistoryUseCase {
       userId,
       filename: dto.filename,
       rowCount: dto.rowCount,
-      csvContent: dto.csvContent,
     });
   }
 }

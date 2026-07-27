@@ -9,6 +9,7 @@ export class MongooseUserRepository implements IUserRepository {
       email: doc.email,
       passwordHash: doc.passwordHash,
       name: doc.name,
+      role: doc.role || "user",
       teamIds: doc.teamIds || [],
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
@@ -28,6 +29,11 @@ export class MongooseUserRepository implements IUserRepository {
   async findByIds(ids: string[]): Promise<User[]> {
     const docs = await UserModel.find({ _id: { $in: ids } });
     return docs.map((d) => this.toDomain(d));
+  }
+
+  async findAdmin(): Promise<User | null> {
+    const doc = await UserModel.findOne({ role: "admin" });
+    return doc ? this.toDomain(doc) : null;
   }
 
   async searchUsers(query: string): Promise<User[]> {

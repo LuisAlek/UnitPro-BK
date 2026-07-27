@@ -59,38 +59,6 @@ router.post("/team/:teamId", authMiddleware, async (req: Request, res: Response)
   }
 });
 
-router.post("/team/:teamId/seed", authMiddleware, async (req: Request, res: Response) => {
-  try {
-    const created = await manageEquivalences.seedForTeam(getParam(req, "teamId"));
-    res.status(201).json({ seeded: created.length, equivalences: created });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    res.status(400).json({ error: message });
-  }
-});
-
-router.post("/seed", authMiddleware, async (req: Request, res: Response) => {
-  try {
-    const authReq = req as AuthRequest;
-    const created = await manageEquivalences.seed(authReq.userId!);
-    res.status(201).json({ seeded: created.length, equivalences: created });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    res.status(400).json({ error: message });
-  }
-});
-
-router.post("/reseed", authMiddleware, async (req: Request, res: Response) => {
-  try {
-    const authReq = req as AuthRequest;
-    const created = await manageEquivalences.reseed(authReq.userId!);
-    res.json({ reseeded: created.length, equivalences: created });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    res.status(400).json({ error: message });
-  }
-});
-
 router.post("/", authMiddleware, async (req: Request, res: Response) => {
   try {
     const authReq = req as AuthRequest;

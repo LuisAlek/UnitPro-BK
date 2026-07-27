@@ -5,6 +5,7 @@ export interface IUserDocument extends Document {
   email: string;
   passwordHash: string;
   name: string;
+  role: "user" | "admin";
   teamIds: string[];
   createdAt: Date;
   updatedAt: Date;
@@ -15,6 +16,7 @@ const userSchema = new Schema<IUserDocument>(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
     name: { type: String, required: true, trim: true },
+    role: { type: String, enum: ["user", "admin"], default: "user" },
     teamIds: [{ type: String }],
   },
   { timestamps: true }

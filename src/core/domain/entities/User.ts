@@ -3,6 +3,7 @@ export interface User {
   email: string;
   passwordHash: string;
   name: string;
+  role?: "user" | "admin";
   teamIds: string[];
   createdAt?: Date;
   updatedAt?: Date;

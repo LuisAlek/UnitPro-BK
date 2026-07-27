@@ -9,7 +9,6 @@ export class MongooseDownloadRepository implements IDownloadRepository {
       userId: doc.userId,
       filename: doc.filename,
       rowCount: doc.rowCount,
-      csvContent: doc.csvContent,
       createdAt: doc.createdAt,
     };
   }

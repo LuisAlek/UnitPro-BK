@@ -2,8 +2,7 @@ import express, { Request, Response } from "express";
 import cors from "cors";
 import { env } from "./config/env";
 import { connectDatabase } from "./config/database";
-import { seedAdmin, migrateTeams } from "./config/seedAdmin";
-import { MongooseUserRepository } from "./infrastructure/adapters/persistence/MongooseUserRepository";
+import { migrateTeams } from "./config/seedAdmin";
 import authRoutes from "./infrastructure/adapters/api/routes/auth";
 import equivalenceRoutes from "./infrastructure/adapters/api/routes/equivalences";
 import downloadRoutes from "./infrastructure/adapters/api/routes/downloads";
@@ -33,9 +32,7 @@ app.use("/api/quickbooks", quickbooksRoutes);
 
 async function start() {
   await connectDatabase();
-  const userRepo = new MongooseUserRepository();
   await migrateTeams();
-  await seedAdmin(userRepo);
   app.listen(env.PORT, () => {
     console.log(`Backend running on http://localhost:${env.PORT}`);
   });

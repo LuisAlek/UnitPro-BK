@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { IEquivalenceRepository } from "../domain/ports/IEquivalenceRepository";
 import { CreateEquivalenceDTO, UpdateEquivalenceDTO, Equivalence } from "../domain/entities/Equivalence";
 import { defaultEquivalences } from "../../config/defaultEquivalences";
@@ -7,11 +8,37 @@ export class ManageEquivalencesUseCase {
 
   async getAll(userId?: string): Promise<Equivalence[]> {
     if (userId) return this.equivalenceRepository.findAllByUser(userId);
-    return this.equivalenceRepository.findAll();
+    return this.getAllPublic();
   }
 
   async getAllPublic(): Promise<Equivalence[]> {
-    return this.equivalenceRepository.findAll();
+    const dbEquivalences = await this.equivalenceRepository.findAll();
+    const dbByTitle = new Map(dbEquivalences.map((e) => [e.adTitle, e]));
+
+    const merged: Equivalence[] = [];
+    const seenTitles = new Set<string>();
+
+    for (const def of defaultEquivalences) {
+      seenTitles.add(def.adTitle);
+      const dbEntry = dbByTitle.get(def.adTitle);
+      if (dbEntry) {
+        merged.push(dbEntry);
+      } else {
+        merged.push({
+          id: `_default_${crypto.createHash("md5").update(def.adTitle).digest("hex").slice(0, 8)}`,
+          adTitle: def.adTitle,
+          propertyId: def.propertyId,
+        });
+      }
+    }
+
+    for (const dbEntry of dbEquivalences) {
+      if (!seenTitles.has(dbEntry.adTitle)) {
+        merged.push(dbEntry);
+      }
+    }
+
+    return merged;
   }
 
   async getByTeam(teamId: string): Promise<Equivalence[]> {
@@ -39,51 +66,12 @@ export class ManageEquivalencesUseCase {
   }
 
   async update(id: string, dto: UpdateEquivalenceDTO): Promise<Equivalence | null> {
+    if (id.startsWith("_default_")) return null;
     return this.equivalenceRepository.update(id, dto);
   }
 
   async delete(id: string): Promise<boolean> {
+    if (id.startsWith("_default_")) return false;
     return this.equivalenceRepository.delete(id);
-  }
-
-  async seed(userId: string): Promise<Equivalence[]> {
-    const existing = await this.equivalenceRepository.findAllByUser(userId);
-    const existingTitles = new Set(existing.map((e) => e.adTitle));
-
-    const created: Equivalence[] = [];
-    for (const eq of defaultEquivalences) {
-      if (!existingTitles.has(eq.adTitle)) {
-        const createdEq = await this.equivalenceRepository.create({
-          adTitle: eq.adTitle,
-          propertyId: eq.propertyId,
-          userId,
-        });
-        created.push(createdEq);
-      }
-    }
-    return created;
-  }
-
-  async seedForTeam(teamId: string): Promise<Equivalence[]> {
-    const existing = await this.equivalenceRepository.findAllByTeam(teamId);
-    const existingTitles = new Set(existing.map((e) => e.adTitle));
-
-    const created: Equivalence[] = [];
-    for (const eq of defaultEquivalences) {
-      if (!existingTitles.has(eq.adTitle)) {
-        const createdEq = await this.equivalenceRepository.create({
-          adTitle: eq.adTitle,
-          propertyId: eq.propertyId,
-          teamId,
-        });
-        created.push(createdEq);
-      }
-    }
-    return created;
-  }
-
-  async reseed(userId: string): Promise<Equivalence[]> {
-    await this.equivalenceRepository.deleteAllByUser(userId);
-    return this.seed(userId);
   }
 }
