@@ -41,6 +41,4 @@ const teamSchema = new Schema<ITeamDocument>(
   { timestamps: true }
 );
 
-teamSchema.index({ inviteCode: 1 });
-
 export const TeamModel = mongoose.model<ITeamDocument>("Team", teamSchema);
