@@ -367,7 +367,12 @@ router.post("/filter-payouts", authMiddleware, upload.array("files", 4), async (
       const headers = parseLine(headerLine, delim);
       const colMap = buildColumnMap(headers);
 
-      if (colMap[FIXED.TIPO] < 0 || colMap[FIXED.ANUNCIO] < 0) continue;
+      const tipoIdx = colMap[FIXED.TIPO];
+      const anuncioIdx = colMap[FIXED.ANUNCIO];
+      const montoIdx = colMap[FIXED.MONTO];
+      const totalPagadoIdx = colMap[FIXED.TOTAL_PAGADO];
+
+      if (tipoIdx < 0 || anuncioIdx < 0) continue;
 
       let payoutActual: string[] | null = null;
       let reservasDelPayout: string[][] = [];
@@ -376,7 +381,7 @@ router.post("/filter-payouts", authMiddleware, upload.array("files", 4), async (
         if (!payoutActual) return;
 
         const reservasValidas = reservasDelPayout.filter((row) => {
-          const anuncio = (row[FIXED.ANUNCIO] || "").trim();
+          const anuncio = (row[anuncioIdx] || "").trim();
           return equivalenceMap.has(anuncio);
         });
 
@@ -387,15 +392,15 @@ router.post("/filter-payouts", authMiddleware, upload.array("files", 4), async (
         }
 
         const total = reservasValidas.reduce((sum, r) => {
-          const val = parseFloat((r[FIXED.MONTO] || "").replace(",", "."));
+          const val = parseFloat((montoIdx >= 0 ? r[montoIdx] : "").replace(",", "."));
           return sum + (isNaN(val) ? 0 : val);
         }, 0);
 
         const payoutRow = [...payoutActual];
-        payoutRow[FIXED.MONTO] = "";
-        payoutRow[FIXED.TOTAL_PAGADO] = total.toFixed(2);
+        if (montoIdx >= 0) payoutRow[montoIdx] = "";
+        if (totalPagadoIdx >= 0) payoutRow[totalPagadoIdx] = total.toFixed(2);
 
-        if (allHeaders.length === 0) allHeaders.push(...OUTPUT_COLUMNS);
+        if (allHeaders.length === 0) allHeaders.push(...headers);
 
         allRows.push(payoutRow);
         allRows.push(...reservasValidas);
@@ -405,17 +410,17 @@ router.post("/filter-payouts", authMiddleware, upload.array("files", 4), async (
       };
 
       for (const line of lines.slice(1)) {
-        const row = parseLine(line, delim);
-        const fixedRow = toFixedRow(row, colMap);
-        while (fixedRow.length < OUTPUT_COLUMNS.length) fixedRow.push("");
+        const rawRow = parseLine(line, delim);
+        const row = rawRow.slice(0, headers.length);
+        while (row.length < headers.length) row.push("");
 
-        const tipo = (fixedRow[FIXED.TIPO] || "").trim().toLowerCase();
+        const tipo = (row[tipoIdx] || "").trim().toLowerCase();
         if (tipo === "payout") {
           cerrarPayout();
-          payoutActual = fixedRow;
+          payoutActual = row;
           reservasDelPayout = [];
         } else {
-          if (payoutActual) reservasDelPayout.push(fixedRow);
+          if (payoutActual) reservasDelPayout.push(row);
         }
       }
       cerrarPayout();
@@ -462,7 +467,12 @@ router.post("/download-payouts", authMiddleware, upload.array("files", 4), async
       const headers = parseLine(headerLine, delim);
       const colMap = buildColumnMap(headers);
 
-      if (colMap[FIXED.TIPO] < 0 || colMap[FIXED.ANUNCIO] < 0) continue;
+      const tipoIdx = colMap[FIXED.TIPO];
+      const anuncioIdx = colMap[FIXED.ANUNCIO];
+      const montoIdx = colMap[FIXED.MONTO];
+      const totalPagadoIdx = colMap[FIXED.TOTAL_PAGADO];
+
+      if (tipoIdx < 0 || anuncioIdx < 0) continue;
 
       let payoutActual: string[] | null = null;
       let reservasDelPayout: string[][] = [];
@@ -471,7 +481,7 @@ router.post("/download-payouts", authMiddleware, upload.array("files", 4), async
         if (!payoutActual) return;
 
         const reservasValidas = reservasDelPayout.filter((row) => {
-          const anuncio = (row[FIXED.ANUNCIO] || "").trim();
+          const anuncio = (row[anuncioIdx] || "").trim();
           return equivalenceMap.has(anuncio);
         });
 
@@ -482,15 +492,15 @@ router.post("/download-payouts", authMiddleware, upload.array("files", 4), async
         }
 
         const total = reservasValidas.reduce((sum, r) => {
-          const val = parseFloat((r[FIXED.MONTO] || "").replace(",", "."));
+          const val = parseFloat((montoIdx >= 0 ? r[montoIdx] : "").replace(",", "."));
           return sum + (isNaN(val) ? 0 : val);
         }, 0);
 
         const payoutRow = [...payoutActual];
-        payoutRow[FIXED.MONTO] = "";
-        payoutRow[FIXED.TOTAL_PAGADO] = total.toFixed(2);
+        if (montoIdx >= 0) payoutRow[montoIdx] = "";
+        if (totalPagadoIdx >= 0) payoutRow[totalPagadoIdx] = total.toFixed(2);
 
-        if (allHeaders.length === 0) allHeaders.push(...OUTPUT_COLUMNS);
+        if (allHeaders.length === 0) allHeaders.push(...headers);
 
         allRows.push(payoutRow);
         allRows.push(...reservasValidas);
@@ -500,17 +510,16 @@ router.post("/download-payouts", authMiddleware, upload.array("files", 4), async
       };
 
       for (const line of lines.slice(1)) {
-        const row = parseLine(line, delim);
-        const fixedRow = toFixedRow(row, colMap);
-        while (fixedRow.length < OUTPUT_COLUMNS.length) fixedRow.push("");
+        const row = parseLine(line, delim).slice(0, headers.length);
+        while (row.length < headers.length) row.push("");
 
-        const tipo = (fixedRow[FIXED.TIPO] || "").trim().toLowerCase();
+        const tipo = (row[tipoIdx] || "").trim().toLowerCase();
         if (tipo === "payout") {
           cerrarPayout();
-          payoutActual = fixedRow;
+          payoutActual = row;
           reservasDelPayout = [];
         } else {
-          if (payoutActual) reservasDelPayout.push(fixedRow);
+          if (payoutActual) reservasDelPayout.push(row);
         }
       }
       cerrarPayout();
@@ -522,13 +531,8 @@ router.post("/download-payouts", authMiddleware, upload.array("files", 4), async
     }
 
     // Build CSV with BOM
-    const hasCommaInCells = allHeaders.some((h) => h.includes(",")) || allRows.some((r) => r.some((c) => c.includes(",")));
-    const outDelim = hasCommaInCells ? "\t" : ",";
-    const esc = (c: string) =>
-      c.includes(outDelim) || c.includes('"') || c.includes("\n")
-        ? `"${c.replace(/"/g, '""')}"`
-        : c;
-    const csvLines = [allHeaders.map(esc).join(outDelim), ...allRows.map((r) => r.map(esc).join(outDelim))];
+    const outDelim = allHeaders.some((h) => h.includes(",")) ? "\t" : ",";
+    const csvLines = [allHeaders.join(outDelim), ...allRows.map((r) => r.join(outDelim))];
     const bom = "\uFEFF";
     const buffer = Buffer.from(bom + csvLines.join("\n"), "utf-8");
 
