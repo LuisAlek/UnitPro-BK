@@ -79,6 +79,84 @@ function findColumnIndex(headers: string[], names: string[]): number {
   return -1;
 }
 
+// ─── Fixed Output Columns ───
+
+const OUTPUT_COLUMNS = [
+  "Fecha",
+  "Tipo",
+  "Código de confirmación",
+  "Fecha de la reservación",
+  "Fecha de inicio",
+  "Noches",
+  "Huésped",
+  "Anuncio",
+  "Detalles",
+  "Código de referencia",
+  "Moneda",
+  "Monto",
+  "Total pagado",
+  "Tarifa por servicio",
+  "Tarifa de limpieza",
+  "Tarifa del complejo turístico",
+  "Tarifa por gestión",
+  "Tarifa de la comunidad",
+];
+
+const OUTPUT_ALIASES: Record<string, string[]> = {
+  "Fecha": ["fecha", "date"],
+  "Tipo": ["tipo", "type"],
+  "Código de confirmación": ["código de confirmación", "confirmación", "código de confirmacion", "confirmation code", "codigo de confirmacion"],
+  "Fecha de la reservación": ["fecha de la reservación", "fecha de la reservacion", "booking date", "fecha de reservación", "fecha de reservacion"],
+  "Fecha de inicio": ["fecha de inicio", "check-in", "check in", "start date", "fecha inicio"],
+  "Noches": ["noches", "nights"],
+  "Huésped": ["huésped", "hu sped", "guest"],
+  "Anuncio": ["anuncio", "ad", "ad title", "listing"],
+  "Detalles": ["detalles", "details"],
+  "Código de referencia": ["código de referencia", "codigo de referencia", "reference code", "código de referencia de la transferencia", "codigo de referencia de la transferencia"],
+  "Moneda": ["moneda", "currency"],
+  "Monto": ["monto", "amount", "total"],
+  "Total pagado": ["total pagado del payout", "total pagado", "total paid"],
+  "Tarifa por servicio": ["tarifa por servicio", "tarifa por servicio del anfitrión", "service fee", "host fee"],
+  "Tarifa de limpieza": ["tarifa de limpieza", "cleaning fee"],
+  "Tarifa del complejo turístico": ["tarifa del complejo turístico", "tarifa del complejo turistico", "resort fee"],
+  "Tarifa por gestión": ["tarifa por gestión", "tarifa por gestion", "management fee"],
+  "Tarifa de la comunidad": ["tarifa de la comunidad", "community fee", "tarifa comunidad"],
+};
+
+function buildColumnMap(headers: string[]): number[] {
+  const lower = headers.map((h) => h.trim().toLowerCase());
+  const map = new Array(OUTPUT_COLUMNS.length).fill(-1);
+  for (let outIdx = 0; outIdx < OUTPUT_COLUMNS.length; outIdx++) {
+    const aliases = OUTPUT_ALIASES[OUTPUT_COLUMNS[outIdx]];
+    for (const alias of aliases) {
+      const inIdx = lower.indexOf(alias.toLowerCase());
+      if (inIdx >= 0) {
+        map[outIdx] = inIdx;
+        break;
+      }
+    }
+  }
+  return map;
+}
+
+function toFixedRow(row: string[], colMap: number[]): string[] {
+  const fixed = new Array(OUTPUT_COLUMNS.length).fill("");
+  for (let outIdx = 0; outIdx < colMap.length; outIdx++) {
+    const inIdx = colMap[outIdx];
+    if (inIdx >= 0 && inIdx < row.length) {
+      fixed[outIdx] = row[inIdx];
+    }
+  }
+  return fixed;
+}
+
+const FIXED = {
+  TIPO: 1,
+  ANUNCIO: 7,
+  MONTO: 11,
+  TOTAL_PAGADO: 12,
+};
+
 function buildExcel(headers: string[], allRows: string[][]): Promise<Buffer> {
   const ExcelJS = require("exceljs");
   const workbook = new ExcelJS.Workbook();
@@ -275,7 +353,6 @@ router.post("/filter-payouts", authMiddleware, upload.array("files", 4), async (
 
     const allHeaders: string[] = [];
     const allRows: string[][] = [];
-    let resortFeeCol = -1;
 
     for (const file of files) {
       const content = file.buffer.toString("utf-8");
@@ -288,16 +365,9 @@ router.post("/filter-payouts", authMiddleware, upload.array("files", 4), async (
       const delim = tabs > commas ? "\t" : ",";
 
       const headers = parseLine(headerLine, delim);
+      const colMap = buildColumnMap(headers);
 
-      const colTipo = headers.findIndex((h) => h.trim().toLowerCase() === "tipo");
-      const colAnuncio = headers.findIndex((h) => h.trim().toLowerCase() === "anuncio");
-      const colMonto = headers.findIndex((h) => h.trim().toLowerCase() === "monto");
-      const colTotalPagado = headers.findIndex((h) => h.trim().toLowerCase() === "total pagado");
-      const colResort = headers.findIndex((h) => /tarifa.*(complejo|comunidad)|(complejo|comunitat|resort).*(tarifa|fee)|resort fee/i.test(h.trim()));
-
-      if (colTipo < 0 || colAnuncio < 0) continue;
-
-      if (resortFeeCol < 0) resortFeeCol = colResort;
+      if (colMap[FIXED.TIPO] < 0 || colMap[FIXED.ANUNCIO] < 0) continue;
 
       let payoutActual: string[] | null = null;
       let reservasDelPayout: string[][] = [];
@@ -306,7 +376,7 @@ router.post("/filter-payouts", authMiddleware, upload.array("files", 4), async (
         if (!payoutActual) return;
 
         const reservasValidas = reservasDelPayout.filter((row) => {
-          const anuncio = (row[colAnuncio] || "").trim();
+          const anuncio = (row[FIXED.ANUNCIO] || "").trim();
           return equivalenceMap.has(anuncio);
         });
 
@@ -317,15 +387,15 @@ router.post("/filter-payouts", authMiddleware, upload.array("files", 4), async (
         }
 
         const total = reservasValidas.reduce((sum, r) => {
-          const val = parseFloat((r[colMonto >= 0 ? colMonto : 0] || "").replace(",", "."));
+          const val = parseFloat((r[FIXED.MONTO] || "").replace(",", "."));
           return sum + (isNaN(val) ? 0 : val);
         }, 0);
 
         const payoutRow = [...payoutActual];
-        if (colMonto >= 0) payoutRow[colMonto] = "";
-        if (colTotalPagado >= 0) payoutRow[colTotalPagado] = total.toFixed(2);
+        payoutRow[FIXED.MONTO] = "";
+        payoutRow[FIXED.TOTAL_PAGADO] = total.toFixed(2);
 
-        if (allHeaders.length === 0) allHeaders.push(...headers);
+        if (allHeaders.length === 0) allHeaders.push(...OUTPUT_COLUMNS);
 
         allRows.push(payoutRow);
         allRows.push(...reservasValidas);
@@ -336,15 +406,16 @@ router.post("/filter-payouts", authMiddleware, upload.array("files", 4), async (
 
       for (const line of lines.slice(1)) {
         const row = parseLine(line, delim);
-        while (row.length < 20) row.push("");
+        const fixedRow = toFixedRow(row, colMap);
+        while (fixedRow.length < OUTPUT_COLUMNS.length) fixedRow.push("");
 
-        const tipo = (row[colTipo] || "").trim().toLowerCase();
+        const tipo = (fixedRow[FIXED.TIPO] || "").trim().toLowerCase();
         if (tipo === "payout") {
           cerrarPayout();
-          payoutActual = row;
+          payoutActual = fixedRow;
           reservasDelPayout = [];
         } else {
-          if (payoutActual) reservasDelPayout.push(row);
+          if (payoutActual) reservasDelPayout.push(fixedRow);
         }
       }
       cerrarPayout();
@@ -353,14 +424,6 @@ router.post("/filter-payouts", authMiddleware, upload.array("files", 4), async (
     if (allRows.length === 0) {
       res.status(400).json({ error: "No matching reservations found in any file" });
       return;
-    }
-
-    // Remove "Tarifa del complejo turístico" column from all rows
-    if (resortFeeCol >= 0) {
-      allHeaders.splice(resortFeeCol, 1);
-      for (const row of allRows) {
-        if (resortFeeCol < row.length) row.splice(resortFeeCol, 1);
-      }
     }
 
     res.json({ headers: allHeaders, rows: allRows });
@@ -385,7 +448,6 @@ router.post("/download-payouts", authMiddleware, upload.array("files", 4), async
 
     const allHeaders: string[] = [];
     const allRows: string[][] = [];
-    let resortFeeCol = -1;
 
     for (const file of files) {
       const content = file.buffer.toString("utf-8");
@@ -398,16 +460,9 @@ router.post("/download-payouts", authMiddleware, upload.array("files", 4), async
       const delim = tabs > commas ? "\t" : ",";
 
       const headers = parseLine(headerLine, delim);
+      const colMap = buildColumnMap(headers);
 
-      const colTipo = headers.findIndex((h) => h.trim().toLowerCase() === "tipo");
-      const colAnuncio = headers.findIndex((h) => h.trim().toLowerCase() === "anuncio");
-      const colMonto = headers.findIndex((h) => h.trim().toLowerCase() === "monto");
-      const colTotalPagado = headers.findIndex((h) => h.trim().toLowerCase() === "total pagado");
-      const colResort = headers.findIndex((h) => /tarifa.*(complejo|comunidad)|(complejo|comunitat|resort).*(tarifa|fee)|resort fee/i.test(h.trim()));
-
-      if (colTipo < 0 || colAnuncio < 0) continue;
-
-      if (resortFeeCol < 0) resortFeeCol = colResort;
+      if (colMap[FIXED.TIPO] < 0 || colMap[FIXED.ANUNCIO] < 0) continue;
 
       let payoutActual: string[] | null = null;
       let reservasDelPayout: string[][] = [];
@@ -416,7 +471,7 @@ router.post("/download-payouts", authMiddleware, upload.array("files", 4), async
         if (!payoutActual) return;
 
         const reservasValidas = reservasDelPayout.filter((row) => {
-          const anuncio = (row[colAnuncio] || "").trim();
+          const anuncio = (row[FIXED.ANUNCIO] || "").trim();
           return equivalenceMap.has(anuncio);
         });
 
@@ -427,15 +482,15 @@ router.post("/download-payouts", authMiddleware, upload.array("files", 4), async
         }
 
         const total = reservasValidas.reduce((sum, r) => {
-          const val = parseFloat((r[colMonto >= 0 ? colMonto : 0] || "").replace(",", "."));
+          const val = parseFloat((r[FIXED.MONTO] || "").replace(",", "."));
           return sum + (isNaN(val) ? 0 : val);
         }, 0);
 
         const payoutRow = [...payoutActual];
-        if (colMonto >= 0) payoutRow[colMonto] = "";
-        if (colTotalPagado >= 0) payoutRow[colTotalPagado] = total.toFixed(2);
+        payoutRow[FIXED.MONTO] = "";
+        payoutRow[FIXED.TOTAL_PAGADO] = total.toFixed(2);
 
-        if (allHeaders.length === 0) allHeaders.push(...headers);
+        if (allHeaders.length === 0) allHeaders.push(...OUTPUT_COLUMNS);
 
         allRows.push(payoutRow);
         allRows.push(...reservasValidas);
@@ -446,15 +501,16 @@ router.post("/download-payouts", authMiddleware, upload.array("files", 4), async
 
       for (const line of lines.slice(1)) {
         const row = parseLine(line, delim);
-        while (row.length < 20) row.push("");
+        const fixedRow = toFixedRow(row, colMap);
+        while (fixedRow.length < OUTPUT_COLUMNS.length) fixedRow.push("");
 
-        const tipo = (row[colTipo] || "").trim().toLowerCase();
+        const tipo = (fixedRow[FIXED.TIPO] || "").trim().toLowerCase();
         if (tipo === "payout") {
           cerrarPayout();
-          payoutActual = row;
+          payoutActual = fixedRow;
           reservasDelPayout = [];
         } else {
-          if (payoutActual) reservasDelPayout.push(row);
+          if (payoutActual) reservasDelPayout.push(fixedRow);
         }
       }
       cerrarPayout();
@@ -465,17 +521,14 @@ router.post("/download-payouts", authMiddleware, upload.array("files", 4), async
       return;
     }
 
-    // Remove "Tarifa del complejo turístico" column from all rows
-    if (resortFeeCol >= 0) {
-      allHeaders.splice(resortFeeCol, 1);
-      for (const row of allRows) {
-        if (resortFeeCol < row.length) row.splice(resortFeeCol, 1);
-      }
-    }
-
     // Build CSV with BOM
-    const outDelim = allHeaders.some((h) => h.includes(",")) ? "\t" : ",";
-    const csvLines = [allHeaders.join(outDelim), ...allRows.map((r) => r.join(outDelim))];
+    const hasCommaInCells = allHeaders.some((h) => h.includes(",")) || allRows.some((r) => r.some((c) => c.includes(",")));
+    const outDelim = hasCommaInCells ? "\t" : ",";
+    const esc = (c: string) =>
+      c.includes(outDelim) || c.includes('"') || c.includes("\n")
+        ? `"${c.replace(/"/g, '""')}"`
+        : c;
+    const csvLines = [allHeaders.map(esc).join(outDelim), ...allRows.map((r) => r.map(esc).join(outDelim))];
     const bom = "\uFEFF";
     const buffer = Buffer.from(bom + csvLines.join("\n"), "utf-8");
 
